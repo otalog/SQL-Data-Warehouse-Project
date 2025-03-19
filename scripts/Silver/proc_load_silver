@@ -1,8 +1,10 @@
 
+
+Print '>> Loading table to the silver layer from the crm source system';
+
+Print '>> Inserting Data Into: silver.crm_cust_info';
+
 --CUSTOMER INFO LOAD INTO SILVER LAYER
-
-
-
 --Check for Nulls or Duplicates in Primary KEY
 --Expectation: No Results
 --1.
@@ -87,7 +89,10 @@ where cst_id is not null
 where flag_last= 1 -- this selects the date we need
 
 --finally insert into the silver table
-
+  
+Print '>> Truncating Table:silver.crm_cust_info';
+Truncate Table silver.crm_cust_info
+Print '>> Inserting Data Into: silver.crm_cust_info';
 Insert into silver.crm_cust_info(
 cst_id,
 cst_key,
@@ -125,7 +130,7 @@ select * from silver.crm_cust_info
 
 
 
---PRODUCT INFO LOAD INTO SILVER LAYER
+Print '>> Inserting Data Into: silver.crm_prd_info';
 
 --Check for Nulls or Duplicates in Primary KEY
 --Expectation: No Results
@@ -258,6 +263,10 @@ SELECT  [prd_id]
   FROM [DataWarehouse].[Bronze].[crm_prd_info]
 
   --finally insert into the silver layer
+  
+Print '>> Truncating Table:silver.crm_prd_info';
+Truncate Table silver.crm_prd_info
+Print '>> Inserting Data Into: silver.crm_prd_info';
 insert into silver.crm_prd_info(
   prd_id,
   cat_id,
@@ -289,8 +298,7 @@ insert into silver.crm_prd_info(
   from silver.crm_prd_info
 
 
-  --SALES DETAILS LOAD INTO SILVER LAYER
-
+Print '>> Inserting Data Into: silver.crm_sales_details';
   
 select
 	sls_ord_num,
@@ -420,6 +428,9 @@ end as sls_price
 from  bronze.crm_sales_details
 
 --Finally let insert the data into the silver layer
+Print '>> Truncating Table:silver.crm_sales_details';
+Truncate Table silver.crm_sales_details
+Print '>> Inserting Data Into: silver.crm_sales_details';
 insert into silver.crm_sales_details(
 sls_ord_num,
 	sls_prd_key,
@@ -463,4 +474,183 @@ select * from bronze.crm_sales_details
 
 
 
-  
+
+
+Print '>> Loading table to the silver layer from the erp source system';
+
+Print '>> Inserting Data Into: silver.erp_cust_az12';
+
+-- erp_cust_az12
+select
+cid,
+bdate,
+gen
+from bronze.erp_cust_az12 
+
+--we need to remove NAS from the cid so as to help us join the table with other tables
+
+select
+case when cid like 'NAS%' THEN SUBSTRING(cid,4,len(cid))
+else cid
+end as cid,
+bdate,
+gen
+from bronze.erp_cust_az12 
+
+--check and identify out of date ranges dates
+select distinct
+bdate
+from bronze.erp_cust_az12
+where bdate < '1924-01-01' or bdate > getdate()--getdate() means current date
+-- it appears there are errors in the dates
+
+--resolved
+
+select
+case when cid like 'NAS%' THEN SUBSTRING(cid,4,len(cid))
+else cid
+end as cid,
+case when bdate > getdate() then null
+else bdate
+end as bdate,
+gen
+from bronze.erp_cust_az12 
+
+--standardization & normalization
+select distinct
+gen,
+case when upper(trim(gen)) in ('F', 'FEMALE')  THEN 'Female'
+ when upper(trim(gen)) in ('M', 'MALE')  THEN 'Male'
+else 'n/a'
+end as gen
+from bronze.erp_cust_az12 
+
+--resolved
+
+select
+case when cid like 'NAS%' THEN SUBSTRING(cid,4,len(cid))
+else cid
+end as cid,
+case when bdate > getdate() then null
+else bdate
+end as bdate,
+case when upper(trim(gen)) in ('F', 'FEMALE')  THEN 'Female'
+ when upper(trim(gen)) in ('M', 'MALE')  THEN 'Male'
+else 'n/a'
+end as gen
+from bronze.erp_cust_az12 
+
+--finally insert into the silver layer
+
+Print '>> Truncating Table:silver.erp_cust_az12';
+Truncate Table silver.erp_cust_az12
+Print '>> Inserting Data Into: silver.erp_cust_az12';
+insert into silver.erp_cust_az12(
+cid,
+bdate,
+gen
+)
+select
+case when cid like 'NAS%' THEN SUBSTRING(cid,4,len(cid))
+else cid
+end as cid,
+case when bdate > getdate() then null
+else bdate
+end as bdate,
+case when upper(trim(gen)) in ('F', 'FEMALE')  THEN 'Female'
+ when upper(trim(gen)) in ('M', 'MALE')  THEN 'Male'
+else 'n/a'
+end as gen
+from bronze.erp_cust_az12 
+
+
+
+Print '>> Inserting Data Into: silver.erp_loc_a101';
+-- erp_loc_a101
+
+select 
+cid,
+cntry
+from bronze.erp_loc_a101
+
+--we need to remove the dash sign from the cid so as to be able to join it with other tables
+
+--resolved
+
+select 
+replace(cid, '-', '') cid,
+cntry
+from bronze.erp_loc_a101
+
+
+--checking
+select 
+replace(cid, '-', '') cid,
+cntry
+from bronze.erp_loc_a101
+where replace(cid, '-', ' ') not in
+(select cst_key from silver.crm_cust_info)
+
+--checking for distinct countries
+select distinct
+cntry
+from bronze.erp_loc_a101
+
+--resolved
+select 
+replace(cid, '-', '') cid,
+case when trim(cntry)='DE' THEN'Germany'
+	 when trim(cntry) IN ('US' ,'USA') THEN 'United States'
+	 WHEN TRIM(cntry) ='' OR cntry is null then 'n/a'
+	 else trim(cntry)
+end as cntry
+from bronze.erp_loc_a101
+
+--finally insert it into the silver layer
+Print '>> Truncating Table:silver.erp_loc_a101';
+Truncate Table silver.erp_loc_a101
+Print '>> Inserting Data Into: silver.erp_loc_a101';
+insert into silver.erp_loc_a101(
+cid,
+cntry
+)
+select 
+replace(cid, '-', '') cid,
+case when trim(cntry)='DE' THEN'Germany'
+	 when trim(cntry) IN ('US' ,'USA') THEN 'United States'
+	 WHEN TRIM(cntry) ='' OR cntry is null then 'n/a'
+	 else trim(cntry)
+end as cntry
+from bronze.erp_loc_a101
+
+
+
+
+Print '>> Inserting Data Into: silver.erp_px_cat_g1v2';
+--erp_px_cat_g1v2
+
+select
+id,
+cat,
+subcat,
+maintainance
+from bronze.erp_px_cat_g1v2
+
+--there are no issues in this so we go ahead and insert
+--finally insert into the silver layer
+
+Print '>> Truncating Table:silver.erp_px_cat_g1v2';
+Truncate Table silver.erp_px_cat_g1v2
+Print '>> Inserting Data Into: silver.erp_px_cat_g1v2';
+insert into silver.erp_px_cat_g1v2(
+id,
+cat,
+subcat,
+maintainance)
+
+select
+id,
+cat,
+subcat,
+maintainance
+from bronze.erp_px_cat_g1v2
