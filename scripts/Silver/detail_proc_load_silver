@@ -278,7 +278,7 @@ insert into silver.crm_prd_info(
   prd_end_dt
   )
   SELECT  [prd_id]
-      , SUBSTRING(prd_key,1,5) AS cat_id, -- substring()extracts specific part of a string value
+      , replace(SUBSTRING(prd_key,1,5),'-','_')cat_id, -- substring()extracts specific part of a string value
       substring(prd_key,7, len(prd_key)) as prd_key,
 	  prd_nm,
       isnull (prd_cost,0) AS prd_cost,
@@ -649,7 +649,7 @@ subcat,
 maintainance)
 
 select
-replace(id, '_', '-') id,
+id,
 cat,
 subcat,
 maintainance
