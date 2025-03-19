@@ -649,7 +649,7 @@ subcat,
 maintainance)
 
 select
-id,
+replace(id, '_', '-') id,
 cat,
 subcat,
 maintainance
